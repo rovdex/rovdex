@@ -1,0 +1,11 @@
+[package]
+name = "rovdex-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+rovdex-core = { path = "../core" }

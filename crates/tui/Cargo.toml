@@ -1,0 +1,8 @@
+[package]
+name = "rovdex-tui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+crossterm.workspace = true
+ratatui.workspace = true
