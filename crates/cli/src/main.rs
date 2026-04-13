@@ -1,6 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use rovdex_core::{Context, Engine, Task};
+use rovdex_core::{Context, EchoProvider, Engine, Task};
 
 #[derive(Parser, Debug)]
 #[command(name = "rovdex", version, about = "Rovdex coding agent")]
@@ -14,23 +14,22 @@ enum Commands {
     Chat {
         prompt: String,
     },
+    Tui,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    let engine = Engine::new();
+    let engine = Engine::with_standard_tools(EchoProvider);
+    let context = Context::from_current_dir()?;
 
     match cli.command {
         Commands::Chat { prompt } => {
-            let output = engine.run(
-                Context {
-                    cwd: std::env::current_dir()?.display().to_string(),
-                    repository_root: None,
-                },
-                Task::new("session", prompt),
-            );
-            println!("{output}");
+            let result = engine.run(context, Task::new("session", prompt))?;
+            println!("{}", result.final_message);
+        }
+        Commands::Tui => {
+            rovdex_tui::run()?;
         }
     }
 

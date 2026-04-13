@@ -9,3 +9,4 @@ clap.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 rovdex-core = { path = "../core" }
+rovdex-tui = { path = "../tui" }
