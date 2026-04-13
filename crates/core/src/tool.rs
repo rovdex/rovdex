@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::Context;
 
@@ -9,6 +10,8 @@ use crate::Context;
 pub struct ToolSpec {
     pub name: String,
     pub description: String,
+    #[serde(default)]
+    pub input_schema: Value,
 }
 
 impl ToolSpec {
@@ -16,19 +19,36 @@ impl ToolSpec {
         Self {
             name: name.into(),
             description: description.into(),
+            input_schema: Value::String(String::from("string")),
         }
+    }
+
+    pub fn with_input_schema(mut self, input_schema: Value) -> Self {
+        self.input_schema = input_schema;
+        self
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolResult {
-    pub output: String,
+    pub output: Value,
 }
 
 impl ToolResult {
-    pub fn new(output: impl Into<String>) -> Self {
+    pub fn new(output: impl Into<Value>) -> Self {
         Self {
             output: output.into(),
+        }
+    }
+
+    pub fn text(output: impl Into<String>) -> Self {
+        Self::new(Value::String(output.into()))
+    }
+
+    pub fn render(&self) -> String {
+        match &self.output {
+            Value::String(value) => value.clone(),
+            other => serde_json::to_string_pretty(other).unwrap_or_else(|_| other.to_string()),
         }
     }
 }
@@ -36,7 +56,7 @@ impl ToolResult {
 pub trait Tool: Send + Sync {
     fn spec(&self) -> ToolSpec;
 
-    fn call(&self, context: &Context, input: &str) -> Result<ToolResult>;
+    fn call(&self, context: &Context, input: &Value) -> Result<ToolResult>;
 }
 
 #[derive(Default)]
@@ -64,7 +84,7 @@ impl ToolRegistry {
         specs
     }
 
-    pub fn call(&self, name: &str, context: &Context, input: &str) -> Result<ToolResult> {
+    pub fn call(&self, name: &str, context: &Context, input: &Value) -> Result<ToolResult> {
         let tool = self
             .tools
             .get(name)
