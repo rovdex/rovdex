@@ -13,6 +13,8 @@ pub struct Message {
     pub role: Role,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tool_call_id: Option<String>,
     pub content: String,
 }
 
@@ -30,9 +32,18 @@ impl Message {
     }
 
     pub fn tool(name: impl Into<String>, content: impl Into<String>) -> Self {
+        Self::tool_with_id(name, Option::<String>::None, content)
+    }
+
+    pub fn tool_with_id(
+        name: impl Into<String>,
+        tool_call_id: impl Into<Option<String>>,
+        content: impl Into<String>,
+    ) -> Self {
         Self {
             role: Role::Tool,
             name: Some(name.into()),
+            tool_call_id: tool_call_id.into(),
             content: content.into(),
         }
     }
@@ -41,6 +52,7 @@ impl Message {
         Self {
             role,
             name: None,
+            tool_call_id: None,
             content: content.into(),
         }
     }

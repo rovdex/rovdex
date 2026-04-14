@@ -5,10 +5,10 @@ use crate::{
     Agent, PermissionAction, ProviderSelection, WorkspaceConfig,
     tools::{
         BashTool, CurrentDirectoryTool, EditFileTool, GitStatusTool, GlobTool, GrepTool,
-        ListDirectoryTool, ReadFileTool, WriteFileTool,
+        ListDirectoryTool, ReadFileTool, WorkspaceMapTool, WriteFileTool,
     },
     Context, EchoProvider, Message, Provider, ProviderRequest, Session, SessionEvent,
-    SessionMessage, SessionRun, Task, ToolRegistry,
+    SessionMessage, SessionRun, Task, ToolRegistry, WorkspaceMap,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +52,7 @@ impl<P: Provider> Engine<P> {
         tools.register(ReadFileTool);
         tools.register(WriteFileTool);
         tools.register(GitStatusTool);
+        tools.register(WorkspaceMapTool);
         Self::new(provider, tools)
     }
 
@@ -243,7 +244,11 @@ impl<P: Provider> Engine<P> {
                     message_id: tool_message_id,
                     tool: call.name.clone(),
                 });
-                messages.push(Message::tool(call.name, tool_result.render()));
+                messages.push(Message::tool_with_id(
+                    call.name,
+                    call.id,
+                    tool_result.render(),
+                ));
             }
         }
 
@@ -286,6 +291,7 @@ impl<P: Provider> Engine<P> {
                 messages.push(Message {
                     role: session_message.role.clone(),
                     name: None,
+                    tool_call_id: None,
                     content: text,
                 });
             }
@@ -319,7 +325,7 @@ fn build_system_prompt(
         .unwrap_or_else(|| "<none>".to_string());
 
     format!(
-        "You are {}, a coding agent oriented toward Codex-style workflows.\nagent: {}\nagent_mode: {:?}\nprovider: {}\nmodel: {}\nworkspace: {}\nrepository_root: {}\ndesktop_targets: {}\nUse tools when they help, prefer repository-aware actions, and keep behavior portable across macOS, Windows, and Linux.\n",
+        "You are {}, a coding agent oriented toward Codex-style workflows.\nagent: {}\nagent_mode: {:?}\nprovider: {}\nmodel: {}\nworkspace: {}\nrepository_root: {}\ndesktop_targets: {}\n{}\nUse tools when they help, prefer repository-aware actions, and keep behavior portable across macOS, Windows, and Linux.\n",
         config.app_name,
         agent.name,
         agent.mode,
@@ -328,7 +334,19 @@ fn build_system_prompt(
         context.cwd.display(),
         repository_root,
         config.desktop_targets.join(", "),
+        build_workspace_map_section(context),
     )
+}
+
+fn build_workspace_map_section(context: &Context) -> String {
+    let root = context
+        .repository_root
+        .as_ref()
+        .unwrap_or(&context.cwd);
+    match WorkspaceMap::scan(root) {
+        Ok(map) => map.render_markdown(),
+        Err(error) => format!("Workspace map unavailable: {error}"),
+    }
 }
 
 #[cfg(test)]

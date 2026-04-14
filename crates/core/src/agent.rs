@@ -117,6 +117,7 @@ impl Agent {
             (String::from("grep"), true),
             (String::from("list_directory"), true),
             (String::from("read_file"), true),
+            (String::from("workspace_map"), true),
             (String::from("write"), true),
             (String::from("git_status"), true),
         ]);
@@ -142,6 +143,7 @@ impl Agent {
             (String::from("grep"), true),
             (String::from("list_directory"), true),
             (String::from("read_file"), true),
+            (String::from("workspace_map"), true),
             (String::from("git_status"), true),
         ]);
         agent.permissions.extend([

@@ -10,7 +10,7 @@ use regex::Regex;
 use serde_json::{json, Value};
 use walkdir::WalkDir;
 
-use crate::{Context, Tool, ToolResult, ToolSpec};
+use crate::{Context, Tool, ToolResult, ToolSpec, WorkspaceMap};
 
 #[derive(Debug, Default)]
 pub struct CurrentDirectoryTool;
@@ -382,6 +382,39 @@ impl Tool for BashTool {
             "success": output.status.success(),
             "stdout": String::from_utf8_lossy(&output.stdout).trim().to_string(),
             "stderr": String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        })))
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct WorkspaceMapTool;
+
+impl Tool for WorkspaceMapTool {
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new(
+            "workspace_map",
+            "Summarize the workspace structure, important files, and extracted symbols",
+        )
+        .with_input_schema(json!({
+            "type": "object",
+            "properties": {
+                "path": { "type": "string" }
+            },
+            "additionalProperties": false
+        }))
+    }
+
+    fn call(&self, context: &Context, input: &Value) -> Result<ToolResult> {
+        let root = resolve_path(context, input);
+        let map = WorkspaceMap::scan(&root)?;
+        Ok(ToolResult::new(json!({
+            "root": map.root,
+            "scanned_files": map.scanned_files,
+            "total_lines": map.total_lines,
+            "languages": map.languages,
+            "directories": map.directories,
+            "key_files": map.key_files,
+            "rendered": map.render_markdown(),
         })))
     }
 }

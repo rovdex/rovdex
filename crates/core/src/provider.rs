@@ -8,10 +8,12 @@ use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
-use crate::{Config, Context, Message, ProviderConfig, ProviderKind, Role, ToolSpec, WorkspaceConfig};
+use crate::{Context, Message, ProviderConfig, ProviderKind, Role, ToolSpec, WorkspaceConfig};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolCall {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
     pub name: String,
     pub input: Value,
 }
@@ -19,6 +21,19 @@ pub struct ToolCall {
 impl ToolCall {
     pub fn new(name: impl Into<String>, input: impl Into<Value>) -> Self {
         Self {
+            id: None,
+            name: name.into(),
+            input: input.into(),
+        }
+    }
+
+    pub fn with_id(
+        id: impl Into<Option<String>>,
+        name: impl Into<String>,
+        input: impl Into<Value>,
+    ) -> Self {
+        Self {
+            id: id.into(),
             name: name.into(),
             input: input.into(),
         }
@@ -282,30 +297,91 @@ struct OpenAiChoice {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct OpenAiMessage {
     #[serde(default)]
-    content: Option<String>,
+    content: Option<Value>,
+    #[serde(default)]
+    tool_calls: Vec<OpenAiToolCall>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct OpenAiToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: OpenAiFunctionCall,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct OpenAiFunctionCall {
+    name: String,
+    arguments: String,
 }
 
 fn build_openai_payload(request: &ProviderRequest) -> Value {
-    json!({
+    let mut payload = json!({
         "model": request.selection.model_id,
         "messages": request.messages.iter().map(|message| {
-            json!({
-                "role": openai_role(&message.role),
-                "content": message.content,
-            })
+            match message.role {
+                Role::Tool => json!({
+                    "role": "tool",
+                    "content": message.content,
+                    "tool_call_id": message.tool_call_id,
+                }),
+                _ => json!({
+                    "role": openai_role(&message.role),
+                    "content": message.content,
+                }),
+            }
         }).collect::<Vec<_>>(),
-    })
+    });
+
+    if !request.tools.is_empty() {
+        payload["tools"] = json!(request
+            .tools
+            .iter()
+            .map(|tool| {
+                json!({
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.input_schema,
+                    }
+                })
+            })
+            .collect::<Vec<_>>());
+        payload["tool_choice"] = json!("auto");
+    }
+
+    payload
 }
 
 fn parse_openai_response(body: OpenAiChatCompletionResponse) -> Result<ProviderResponse> {
-    let content = body
+    let message = body
         .choices
         .into_iter()
         .next()
-        .and_then(|choice| choice.message.content)
-        .ok_or_else(|| anyhow!("openai-compatible response did not include assistant content"))?;
+        .map(|choice| choice.message)
+        .ok_or_else(|| anyhow!("openai-compatible response did not include assistant message"))?;
 
-    Ok(ProviderResponse::final_message(content))
+    let content = render_openai_content(message.content);
+    let tool_calls = message
+        .tool_calls
+        .into_iter()
+        .map(|tool_call| {
+            let input = if tool_call.function.arguments.trim().is_empty() {
+                Value::Null
+            } else {
+                serde_json::from_str(&tool_call.function.arguments)?
+            };
+            Ok(ToolCall::with_id(
+                Some(tool_call.id),
+                tool_call.function.name,
+                input,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    Ok(ProviderResponse::with_tool_calls(content, tool_calls))
 }
 
 fn openai_role(role: &Role) -> &'static str {
@@ -314,6 +390,30 @@ fn openai_role(role: &Role) -> &'static str {
         Role::User => "user",
         Role::Assistant => "assistant",
         Role::Tool => "tool",
+    }
+}
+
+fn render_openai_content(content: Option<Value>) -> String {
+    let Some(content) = content else {
+        return String::new();
+    };
+
+    match content {
+        Value::String(text) => text,
+        Value::Array(parts) => parts
+            .into_iter()
+            .filter_map(|part| {
+                if let Value::Object(map) = part {
+                    let part_type = map.get("type").and_then(Value::as_str).unwrap_or_default();
+                    if part_type == "text" {
+                        return map.get("text").and_then(Value::as_str).map(str::to_string);
+                    }
+                }
+                None
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+        other => other.to_string(),
     }
 }
 
@@ -344,12 +444,38 @@ mod tests {
         let response = parse_openai_response(OpenAiChatCompletionResponse {
             choices: vec![OpenAiChoice {
                 message: OpenAiMessage {
-                    content: Some(String::from("remote answer")),
+                    content: Some(Value::String(String::from("remote answer"))),
+                    tool_calls: Vec::new(),
                 },
             }],
         })
         .expect("provider response");
 
         assert_eq!(response.content, "remote answer");
+    }
+
+    #[test]
+    fn parses_openai_tool_calls() {
+        let response = parse_openai_response(OpenAiChatCompletionResponse {
+            choices: vec![OpenAiChoice {
+                message: OpenAiMessage {
+                    content: None,
+                    tool_calls: vec![OpenAiToolCall {
+                        id: String::from("call_1"),
+                        kind: String::from("function"),
+                        function: OpenAiFunctionCall {
+                            name: String::from("read_file"),
+                            arguments: String::from(r#"{"path":"README.md"}"#),
+                        },
+                    }],
+                },
+            }],
+        })
+        .expect("provider response");
+
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].id.as_deref(), Some("call_1"));
+        assert_eq!(response.tool_calls[0].name, "read_file");
+        assert_eq!(response.tool_calls[0].input["path"], "README.md");
     }
 }

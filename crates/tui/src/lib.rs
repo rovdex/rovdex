@@ -14,11 +14,13 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
-use rovdex_core::{Context, EchoProvider, Engine, Task};
+use rovdex_core::{Context, EchoProvider, Engine, SessionStore, Task};
 
 pub fn run(demo: bool) -> Result<()> {
+    let context = Context::from_current_dir()?;
     let engine = Engine::with_standard_tools(EchoProvider);
-    let mut app = App::new(engine, demo);
+    let store = SessionStore::for_context(&context);
+    let mut app = App::new(engine, store, demo)?;
     let mut session = TerminalSession::enter()?;
 
     run_app(session.terminal_mut(), &mut app)
@@ -98,19 +100,28 @@ impl Drop for TerminalSession {
 
 struct App {
     engine: Engine<EchoProvider>,
+    store: SessionStore,
     input: String,
     history: Vec<String>,
     status: String,
     should_quit: bool,
     show_welcome: bool,
+    last_session_id: Option<String>,
+    transcript_count: usize,
 }
 
 impl App {
-    fn new(engine: Engine<EchoProvider>, demo: bool) -> Self {
+    fn new(engine: Engine<EchoProvider>, store: SessionStore, demo: bool) -> Result<Self> {
         let mut history = vec![
             String::from("Rovdex session initialized."),
             String::from("Ready for repository tasks."),
         ];
+        let mut status = if demo {
+            String::from("demo mode")
+        } else {
+            String::from("ready")
+        };
+        let mut last_session_id = None;
 
         if demo {
             history.extend([
@@ -121,20 +132,28 @@ impl App {
                 String::from("tool[current_directory]> cwd: /workspace/rovdex"),
                 String::from("tool[list_directory]> crates/\nREADME.md\nCargo.toml"),
             ]);
+        } else if let Some(stored) = store.latest()? {
+            last_session_id = Some(stored.id.clone());
+            status = format!(
+                "restored {} | provider: {} | iterations: {}",
+                stored.id, stored.provider, stored.iterations
+            );
+            history = flatten_session_history(&stored.run);
         }
 
-        Self {
+        let transcript_count = history.len();
+
+        Ok(Self {
             engine,
+            store,
             input: String::new(),
             history,
-            status: if demo {
-                String::from("demo mode")
-            } else {
-                String::from("ready")
-            },
+            status,
             should_quit: false,
             show_welcome: true,
-        }
+            last_session_id,
+            transcript_count,
+        })
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Result<()> {
@@ -179,15 +198,18 @@ impl App {
 
         match Context::from_current_dir().and_then(|context| {
             self.engine
-                .run(context, Task::new("session", prompt.clone()))
+                .run_with_agent(context, Task::new("session", prompt.clone()), None)
         }) {
             Ok(result) => {
-                self.history
-                    .push(format!("assistant> {}", result.final_message));
+                let stored = self.store.save_run(&result)?;
+                self.last_session_id = Some(stored.id.clone());
+                self.history = flatten_session_history(&stored.run);
+                self.transcript_count = self.history.len();
                 self.status = format!(
-                    "provider: {} | iterations: {}",
-                    self.engine.provider_name(),
-                    result.iterations
+                    "saved {} | provider: {} | iterations: {}",
+                    stored.id,
+                    stored.provider,
+                    stored.iterations
                 );
             }
             Err(error) => {
@@ -295,23 +317,79 @@ fn draw_body(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {
 
     let side_panel = Paragraph::new(vec![
         Line::from("Session"),
-        Line::from("- provider: echo"),
-        Line::from("- mode: local"),
-        Line::from("- tools: 4"),
+        Line::from(format!(
+            "- id: {}",
+            app.last_session_id.as_deref().unwrap_or("<none>")
+        )),
+        Line::from(format!("- provider: {}", app.engine.provider_name())),
+        Line::from(format!("- transcript: {}", app.transcript_count)),
+        Line::from(format!(
+            "- store: {}",
+            app.store.root().display()
+        )),
         Line::from(""),
         Line::from("Quick Keys"),
         Line::from("- Enter: submit prompt"),
         Line::from("- Esc: close overlay / quit"),
         Line::from("- Ctrl-C: quit"),
         Line::from(""),
-        Line::from("Planned"),
-        Line::from("- provider switcher"),
-        Line::from("- tool trace view"),
-        Line::from("- patch preview"),
+        Line::from("Sessions"),
+        Line::from("- auto-restore latest"),
+        Line::from("- auto-save on submit"),
+        Line::from("- CLI show/list"),
     ])
     .block(Block::default().borders(Borders::ALL).title("Inspector"))
     .wrap(Wrap { trim: false });
     frame.render_widget(side_panel, columns[2]);
+}
+
+fn flatten_session_history(run: &rovdex_core::SessionRun) -> Vec<String> {
+    let mut lines = Vec::new();
+    for message in &run.session.messages {
+        match message.role {
+            rovdex_core::Role::System => {}
+            rovdex_core::Role::User => {
+                for part in &message.parts {
+                    if let rovdex_core::MessagePart::Text { text } = part {
+                        lines.push(format!("user> {text}"));
+                    }
+                }
+            }
+            rovdex_core::Role::Assistant => {
+                for part in &message.parts {
+                    if let rovdex_core::MessagePart::Text { text } = part {
+                        lines.push(format!("assistant> {text}"));
+                    }
+                }
+            }
+            rovdex_core::Role::Tool => {
+                let tool_name = message
+                    .parts
+                    .iter()
+                    .find_map(|part| match part {
+                        rovdex_core::MessagePart::ToolResult { tool, .. } => Some(tool.clone()),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| String::from("tool"));
+                for part in &message.parts {
+                    if let rovdex_core::MessagePart::ToolResult { output, .. } = part {
+                        let rendered = match output {
+                            serde_json::Value::String(value) => value.clone(),
+                            other => serde_json::to_string_pretty(other)
+                                .unwrap_or_else(|_| other.to_string()),
+                        };
+                        lines.push(format!("tool[{tool_name}]> {rendered}"));
+                    }
+                }
+            }
+        }
+    }
+
+    if lines.is_empty() {
+        vec![String::from("No session history yet.")]
+    } else {
+        lines
+    }
 }
 
 fn draw_input(frame: &mut ratatui::Frame<'_>, area: Rect, app: &App) {

@@ -94,7 +94,10 @@ pub enum MessagePart {
 impl MessagePart {
     pub fn tool_call(call: &ToolCall) -> Self {
         Self::ToolCall {
-            tool: call.name.clone(),
+            tool: call
+                .id
+                .clone()
+                .unwrap_or_else(|| call.name.clone()),
             input: call.input.clone(),
         }
     }
