@@ -1,0 +1,73 @@
+name: Package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: macos
+            target: aarch64-apple-darwin
+          - os: macos-13
+            platform: macos
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            platform: windows
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            platform: windows
+            target: aarch64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build Tests
+        run: cargo test --workspace
+
+      - name: Package
+        shell: bash
+        run: |
+          chmod +x scripts/package.sh
+          chmod +x scripts/generate_icons.sh
+          ./scripts/generate_icons.sh
+          ./scripts/package.sh "${{ matrix.platform }}" "${{ matrix.target }}"
+
+      - name: Setup .NET for WiX
+        if: matrix.platform == 'windows'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install WiX CLI
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 4.*
+          echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build MSI
+        if: matrix.platform == 'windows'
+        shell: pwsh
+        run: |
+          ./scripts/package-windows-msi.ps1 -Target "${{ matrix.target }}"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.target }}
+          path: dist/*

@@ -7,6 +7,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/pivotf/rovdex.git"
@@ -25,3 +26,4 @@ serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 tracing = "0.1"
 walkdir = "2"
+winres = "0.1"

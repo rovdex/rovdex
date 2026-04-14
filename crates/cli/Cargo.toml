@@ -1,7 +1,8 @@
 [package]
 name = "rovdex-cli"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
+build = "build.rs"
 
 [dependencies]
 anyhow.workspace = true
@@ -11,3 +12,6 @@ tokio.workspace = true
 tracing.workspace = true
 rovdex-core = { path = "../core" }
 rovdex-tui = { path = "../tui" }
+
+[build-dependencies]
+winres.workspace = true

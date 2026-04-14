@@ -112,6 +112,19 @@ cargo run -p rovdex-cli -- auth status copilot
 
 # Remove stored authentication
 cargo run -p rovdex-cli -- auth logout copilot
+
+# Build a macOS ARM64 DMG
+./scripts/generate_icons.sh
+scripts/package.sh macos
+
+# Build a Windows x64/AMD64 EXE
+scripts/package.sh windows x86_64-pc-windows-msvc
+
+# Build a Windows ARM64 EXE
+scripts/package.sh windows aarch64-pc-windows-msvc
+
+# Build a Windows MSI on Windows with WiX installed
+pwsh ./scripts/package-windows-msi.ps1 -Target x86_64-pc-windows-msvc
 ```
 
 ## Implementation Direction
@@ -156,6 +169,50 @@ Behavior:
   - `https://api.github.com/copilot_internal/v2/token`
 
 Stored Rovdex auth state is written to the app config directory as `auth.json`, so desktop builds and CLI builds can share the same local credentials.
+
+## Packaging
+
+Rovdex includes a simple release packaging script:
+
+- `scripts/package.sh macos`
+- `scripts/package.sh windows x86_64-pc-windows-msvc`
+- `scripts/package.sh windows aarch64-pc-windows-msvc`
+
+Package contents:
+
+- macOS: DMG containing `Rovdex.app`, `Applications` shortcut, `README.md`, `LICENSE`
+- Windows: standalone `Rovdex.exe`
+- Windows: installer `Rovdex-Windows-*.msi`
+- `README.md`
+- `LICENSE`
+
+Output directory:
+
+- `dist/`
+
+Current status:
+
+- macOS ARM64 DMG can be produced on this machine
+- macOS x64 DMG should be built on an Intel mac runner or a machine with the `x86_64-apple-darwin` target installed
+- Windows x64/AMD64 EXE should be built on a Windows runner or a machine with the `x86_64-pc-windows-msvc` target installed
+- Windows ARM64 EXE should be built on a Windows runner or a machine with the `aarch64-pc-windows-msvc` target installed
+- GitHub Actions workflow: `.github/workflows/package.yml`
+- Release template: `docs/RELEASE_TEMPLATE.md`
+
+Expected release filenames:
+
+- `Rovdex-macOS-arm64.dmg`
+- `Rovdex-macOS-x64.dmg`
+- `Rovdex-Windows-x64.exe`
+- `Rovdex-Windows-arm64.exe`
+- `Rovdex-Windows-x64.msi`
+- `Rovdex-Windows-arm64.msi`
+
+Icon assets:
+
+- source image: `assets/icons/source.png`
+- generated macOS icon: `assets/icons/Rovdex.icns`
+- generated Windows icon: `assets/icons/Rovdex.ico`
 
 ## Who It Is For
 
