@@ -17,13 +17,13 @@ jobs:
           - os: macos-14
             platform: macos
             target: aarch64-apple-darwin
-          - os: macos-13
+          - os: macos-15-intel
             platform: macos
             target: x86_64-apple-darwin
           - os: windows-latest
             platform: windows
             target: x86_64-pc-windows-msvc
-          - os: windows-latest
+          - os: windows-11-arm
             platform: windows
             target: aarch64-pc-windows-msvc
 
@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -43,12 +43,17 @@ jobs:
       - name: Build Tests
         run: cargo test --workspace
 
+      - name: Generate Icons
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          chmod +x scripts/generate_icons.sh
+          ./scripts/generate_icons.sh
+
       - name: Package
         shell: bash
         run: |
           chmod +x scripts/package.sh
-          chmod +x scripts/generate_icons.sh
-          ./scripts/generate_icons.sh
           ./scripts/package.sh "${{ matrix.platform }}" "${{ matrix.target }}"
 
       - name: Setup .NET for WiX
@@ -71,7 +76,7 @@ jobs:
           ./scripts/package-windows-msi.ps1 -Target "${{ matrix.target }}"
 
       - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: package-${{ matrix.target }}
           path: dist/*
