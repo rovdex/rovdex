@@ -121,7 +121,7 @@ cargo run -p rovdex-cli -- session show
 # Show desktop-oriented platform/data paths
 cargo run -p rovdex-cli -- paths
 
-# Import GitHub Copilot authentication using the opencode-style discovery flow
+# Import GitHub Copilot authentication
 cargo run -p rovdex-cli -- auth login copilot
 
 # Check stored authentication status
@@ -140,15 +140,6 @@ scripts/package.sh windows aarch64-pc-windows-msvc
 pwsh ./scripts/package-windows-msi.ps1 -Target x86_64-pc-windows-msvc
 ```
 
-## Implementation Direction
-
-This version now combines two useful ideas from existing developer tools:
-
-- `claude-code-sourcemap`: repository reconstruction and source-level structural context
-- `opencode`: provider-driven CLI/TUI workflow with agents, tools, and sessions
-
-Rovdex adapts those ideas into a Rust workspace with a typed core engine, tool registry, provider routing, session events, TUI shell, and a built-in workspace map that can be fed directly into model context.
-
 ## Desktop Direction
 
 Rovdex is being shaped as a desktop-oriented coding tool, with Windows release packaging currently prioritized.
@@ -164,11 +155,11 @@ Current OS-native path conventions:
 - Windows data/config: `%APPDATA%\\Rovdex`
 - Windows cache: `%LOCALAPPDATA%\\Rovdex\\Cache`
 
-This gives the codebase a clean foundation for adding a real desktop shell later, such as Tauri or another Rust-native application wrapper.
+This gives the codebase a clean foundation for adding a real desktop shell later.
 
 ## Authentication
 
-Rovdex now includes an `opencode`-style GitHub Copilot login path.
+Rovdex now includes a GitHub Copilot login path.
 
 Behavior:
 
