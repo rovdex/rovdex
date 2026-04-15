@@ -11,7 +11,7 @@ Rovdex installer
 
 Usage:
   curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
-  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.2
+  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.3
   ./install --binary /path/to/rovdex
 
 Options:

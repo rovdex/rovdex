@@ -17,7 +17,7 @@ Rovdex now supports an `opencode`-style CLI install flow for published releases.
 curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
 
 # Install a specific release
-curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.2
+curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.3
 
 # Launch the TUI after install
 rovdex
