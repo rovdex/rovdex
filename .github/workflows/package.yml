@@ -12,6 +12,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: macos-14
+            platform: macos
+            target: aarch64-apple-darwin
+          - os: macos-15-intel
+            platform: macos
+            target: x86_64-apple-darwin
           - os: windows-latest
             platform: windows
             target: x86_64-pc-windows-msvc
@@ -35,11 +41,19 @@ jobs:
       - name: Build Tests
         run: cargo test --workspace
 
-      - name: Build CLI Archive
+      - name: Generate Icons
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          chmod +x scripts/generate_icons.sh
+          ./scripts/generate_icons.sh
+
+      - name: Build DMG
+        if: matrix.platform == 'macos'
         shell: bash
         run: |
           chmod +x scripts/package.sh
-          ./scripts/package.sh "${{ matrix.platform }}" "${{ matrix.target }}"
+          ./scripts/package.sh "macos" "${{ matrix.target }}"
 
       - name: Setup .NET for WiX
         if: matrix.platform == 'windows'
@@ -67,9 +81,8 @@ jobs:
         with:
           name: package-${{ matrix.target }}
           path: |
+            dist/*.dmg
             dist/*.exe
-            dist/*.msi
-            dist/*.zip
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

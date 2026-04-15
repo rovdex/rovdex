@@ -10,23 +10,20 @@ Rovdex is designed around these practical needs. It provides a more natural and 
 
 ## Installation
 
-Rovdex now supports an `opencode`-style CLI install flow for published releases.
+Rovdex currently publishes direct installer downloads for desktop testing.
 
 ```bash
-# Install the latest CLI build into ~/.rovdex/bin
-curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
+# macOS
+# Download Rovdex-macOS-*.dmg from Releases and open it
 
-# Install a specific release
-curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.4
-
-# Launch the TUI after install
-rovdex
+# Windows
+# Download Rovdex-Windows-*.exe from Releases and run it
 ```
 
-Release artifacts remain available for direct download as Windows-oriented packages:
+Release artifacts are currently limited to direct installer downloads:
 
-- Windows: installer `.exe` and `.msi`
-- CLI archives for scripted install: `.zip`
+- macOS: `.dmg`
+- Windows: installer `.exe`
 
 ## Core Features
 
@@ -188,17 +185,17 @@ Stored Rovdex auth state is written to the app config directory as `auth.json`, 
 
 ## Packaging
 
-Rovdex currently ships a Windows-focused release flow:
+Rovdex currently ships a desktop-installer release flow:
 
-- `scripts/package.sh windows x86_64-pc-windows-msvc`
-- `scripts/package.sh windows aarch64-pc-windows-msvc`
+- `scripts/package.sh macos aarch64-apple-darwin`
+- `scripts/package.sh macos x86_64-apple-darwin`
 - `pwsh ./scripts/package-windows-msi.ps1 -Target x86_64-pc-windows-msvc`
+- `pwsh ./scripts/package-windows-msi.ps1 -Target aarch64-pc-windows-msvc`
 
 Package contents:
 
+- macOS: `Rovdex-macOS-*.dmg`
 - Windows: installer `Rovdex-Windows-*.exe`
-- Windows: installer `Rovdex-Windows-*.msi`
-- CLI archives: `rovdex-windows-*.zip`
 - `README.md`
 - `LICENSE`
 
@@ -208,6 +205,8 @@ Output directory:
 
 Current status:
 
+- macOS Apple Silicon DMG should be built on a macOS ARM runner
+- macOS Intel DMG should be built on an Intel mac runner
 - Windows x64/AMD64 installer EXE should be built on a Windows runner or a machine with the `x86_64-pc-windows-msvc` target installed
 - Windows ARM64 installer EXE should be built on a Windows runner or a machine with the `aarch64-pc-windows-msvc` target installed
 - GitHub Actions workflow: `.github/workflows/package.yml`
@@ -215,20 +214,19 @@ Current status:
 
 Workflow policy:
 
-- pushing a `v*` tag triggers Windows package builds and publishes a GitHub Release
+- pushing a `v*` tag triggers `.dmg` and `.exe` builds and publishes a GitHub Release
 
 Expected release filenames:
 
+- `Rovdex-macOS-arm64.dmg`
+- `Rovdex-macOS-x64.dmg`
 - `Rovdex-Windows-x64.exe`
 - `Rovdex-Windows-arm64.exe`
-- `Rovdex-Windows-x64.msi`
-- `Rovdex-Windows-arm64.msi`
-- `rovdex-windows-x64.zip`
-- `rovdex-windows-arm64.zip`
 
 Icon assets:
 
 - source image: `assets/icons/source.png`
+- generated macOS icon: `assets/icons/Rovdex.icns`
 - generated Windows icon: `assets/icons/Rovdex.ico`
 
 ## Who It Is For

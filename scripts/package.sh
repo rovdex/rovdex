@@ -15,15 +15,13 @@ VERSION="$(awk '
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/package.sh [macos|windows] [target-triple]
+  scripts/package.sh [macos] [target-triple]
 
 Examples:
   scripts/package.sh macos
-  scripts/package.sh windows x86_64-pc-windows-msvc
 
 Notes:
   - macOS packages are emitted as .dmg containing Rovdex.app
-  - Windows CLI packages are emitted as .zip
   - The script expects the required Rust target and linker toolchain to already exist
 EOF
 }
@@ -39,29 +37,12 @@ case "$platform" in
     case "$target" in
       aarch64-apple-darwin)
         archive_name="${APP_NAME}-macOS-arm64.dmg"
-        cli_archive_name="rovdex-darwin-arm64.tar.gz"
         ;;
       x86_64-apple-darwin)
         archive_name="${APP_NAME}-macOS-x64.dmg"
-        cli_archive_name="rovdex-darwin-x64.tar.gz"
         ;;
       *)
         archive_name="${APP_NAME}-${target}.dmg"
-        cli_archive_name="rovdex-${target}.tar.gz"
-        ;;
-    esac
-    ;;
-  windows)
-    target="${requested_target:-x86_64-pc-windows-msvc}"
-    case "$target" in
-      x86_64-pc-windows-msvc)
-        cli_archive_name="rovdex-windows-x64.zip"
-        ;;
-      aarch64-pc-windows-msvc)
-        cli_archive_name="rovdex-windows-arm64.zip"
-        ;;
-      *)
-        cli_archive_name="rovdex-${target}.zip"
         ;;
     esac
     ;;
@@ -86,14 +67,7 @@ stage_dir="$DIST_DIR/package-${target}"
 rm -rf "$stage_dir"
 mkdir -p "$stage_dir"
 
-cli_stage_dir="$DIST_DIR/cli-${target}"
-rm -rf "$cli_stage_dir"
-mkdir -p "$cli_stage_dir"
-
 source_bin="$ROOT_DIR/target/$target/release/rovdex-cli"
-if [[ "$platform" == "windows" ]]; then
-  source_bin="$ROOT_DIR/target/$target/release/rovdex-cli.exe"
-fi
 
 if [[ ! -f "$source_bin" ]]; then
   echo "expected binary not found: $source_bin" >&2
@@ -162,21 +136,6 @@ EOF
     -format UDZO \
     "$DIST_DIR/$archive_name"
 
-  cp "$source_bin" "$cli_stage_dir/rovdex"
-  chmod +x "$cli_stage_dir/rovdex"
-  cp "$ROOT_DIR/README.md" "$cli_stage_dir/README.md"
-  cp "$ROOT_DIR/LICENSE" "$cli_stage_dir/LICENSE"
-  rm -f "$DIST_DIR/$cli_archive_name"
-  tar -czf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
-else
-  cp "$source_bin" "$cli_stage_dir/rovdex.exe"
-  cp "$ROOT_DIR/README.md" "$cli_stage_dir/README.md"
-  cp "$ROOT_DIR/LICENSE" "$cli_stage_dir/LICENSE"
-  rm -f "$DIST_DIR/$cli_archive_name"
-  tar -a -cf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
 fi
 
-if [[ "$platform" == "macos" ]]; then
-  echo "Created package: $DIST_DIR/$archive_name"
-fi
-echo "Created CLI archive: $DIST_DIR/$cli_archive_name"
+echo "Created package: $DIST_DIR/$archive_name"

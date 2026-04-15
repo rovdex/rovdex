@@ -139,6 +139,16 @@ $msiWxs = @"
 </Wix>
 "@
 
+$outputMsi = Join-Path $DistDir $msiName
+if (Test-Path $outputMsi) {
+  Remove-Item $outputMsi -Force
+}
+
+$outputInstallerExe = Join-Path $DistDir $installerExeName
+if (Test-Path $outputInstallerExe) {
+  Remove-Item $outputInstallerExe -Force
+}
+
 Set-Content -Path $MsiWxsPath -Value $msiWxs -Encoding UTF8
 
 $bundleWxs = @"
@@ -156,23 +166,13 @@ $bundleWxs = @"
         LicenseUrl="https://raw.githubusercontent.com/rovdex/rovdex/main/LICENSE" />
     </BootstrapperApplication>
     <Chain>
-      <MsiPackage SourceFile="$msiName" />
+      <MsiPackage SourceFile="$outputMsi" />
     </Chain>
   </Bundle>
 </Wix>
 "@
 
 Set-Content -Path $BundleWxsPath -Value $bundleWxs -Encoding UTF8
-
-$outputMsi = Join-Path $DistDir $msiName
-if (Test-Path $outputMsi) {
-  Remove-Item $outputMsi -Force
-}
-
-$outputInstallerExe = Join-Path $DistDir $installerExeName
-if (Test-Path $outputInstallerExe) {
-  Remove-Item $outputInstallerExe -Force
-}
 
 Push-Location $BuildDir
 try {
