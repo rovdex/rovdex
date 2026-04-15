@@ -253,6 +253,13 @@ impl OpenAiCompatibleProvider {
     }
 
     fn api_key(&self) -> Result<String> {
+        if let Some(api_key) = self.config.api_key.as_deref() {
+            let trimmed = api_key.trim();
+            if !trimmed.is_empty() {
+                return Ok(trimmed.to_string());
+            }
+        }
+
         let env_name = self
             .config
             .api_key_env

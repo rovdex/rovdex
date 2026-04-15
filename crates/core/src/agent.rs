@@ -136,6 +136,7 @@ impl Agent {
             "Read-only planning agent for repository analysis.",
             AgentMode::Primary,
         );
+        agent.model = Some(String::from("local/planner"));
         agent.tools.extend([
             (String::from("bash"), true),
             (String::from("current_directory"), true),

@@ -37,6 +37,8 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub api_base: Option<String>,
     #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
     pub api_key_env: Option<String>,
     #[serde(default)]
     pub default_model: Option<String>,
@@ -51,6 +53,7 @@ impl ProviderConfig {
             label: label.into(),
             kind: ProviderKind::LocalEcho,
             api_base: None,
+            api_key: None,
             api_key_env: None,
             default_model: None,
             models: BTreeMap::new(),
