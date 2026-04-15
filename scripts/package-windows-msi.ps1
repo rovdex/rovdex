@@ -177,7 +177,14 @@ if (Test-Path $outputInstallerExe) {
 Push-Location $BuildDir
 try {
   wix build -arch $arch -o $outputMsi $MsiWxsPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "wix build failed for MSI package"
+  }
+
   wix build -arch $arch -ext WixToolset.Bal.wixext -o $outputInstallerExe $BundleWxsPath
+  if ($LASTEXITCODE -ne 0) {
+    throw "wix build failed for bundle installer"
+  }
 }
 finally {
   Pop-Location

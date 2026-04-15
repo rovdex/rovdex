@@ -53,6 +53,8 @@ jobs:
         run: |
           dotnet tool install --global wix --version 4.*
           echo "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $wixVersion = (wix --version).Trim()
+          wix extension add --global "WixToolset.Bal.wixext/$wixVersion"
 
       - name: Build MSI
         if: matrix.platform == 'windows'
