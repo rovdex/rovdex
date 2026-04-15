@@ -35,6 +35,12 @@ if ([string]::IsNullOrWhiteSpace($Version)) {
   }
 }
 
+Write-Host "Building Windows executable for $Target..."
+cargo build --release -p rovdex-cli --target $Target
+if ($LASTEXITCODE -ne 0) {
+  throw "Failed to build Windows executable"
+}
+
 if (!(Test-Path $ExeSource)) {
   throw "missing Windows executable: $ExeSource"
 }
