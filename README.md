@@ -199,6 +199,12 @@ Current status:
 - GitHub Actions workflow: `.github/workflows/package.yml`
 - Release template: `docs/RELEASE_TEMPLATE.md`
 
+Workflow policy:
+
+- only `main` is used for automated package builds
+- pushing to `main` triggers package builds
+- pushing a `v*` tag also triggers package builds for release use
+
 Expected release filenames:
 
 - `Rovdex-macOS-arm64.dmg`
