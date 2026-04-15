@@ -9,7 +9,7 @@ use rovdex_core::{
 #[command(name = "rovdex", version, about = "Rovdex coding agent")]
 struct Cli {
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -107,7 +107,12 @@ fn main() -> Result<()> {
     let session_store = SessionStore::for_context(&context);
     let auth_store = AuthStore::for_app(&config.app_name)?;
 
-    match cli.command {
+    let command = cli.command.unwrap_or(Commands::Tui {
+        demo: false,
+        preview: false,
+    });
+
+    match command {
         Commands::Chat {
             agent,
             provider,

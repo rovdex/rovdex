@@ -37,9 +37,18 @@ case "$platform" in
     bin_name="$APP_NAME"
     archive_ext="dmg"
     case "$target" in
-      aarch64-apple-darwin) archive_name="${APP_NAME}-macOS-arm64.dmg" ;;
-      x86_64-apple-darwin) archive_name="${APP_NAME}-macOS-x64.dmg" ;;
-      *) archive_name="${APP_NAME}-${target}.dmg" ;;
+      aarch64-apple-darwin)
+        archive_name="${APP_NAME}-macOS-arm64.dmg"
+        cli_archive_name="rovdex-darwin-arm64.tar.gz"
+        ;;
+      x86_64-apple-darwin)
+        archive_name="${APP_NAME}-macOS-x64.dmg"
+        cli_archive_name="rovdex-darwin-x64.tar.gz"
+        ;;
+      *)
+        archive_name="${APP_NAME}-${target}.dmg"
+        cli_archive_name="rovdex-${target}.tar.gz"
+        ;;
     esac
     ;;
   windows)
@@ -47,9 +56,18 @@ case "$platform" in
     bin_name="${APP_NAME}.exe"
     archive_ext="exe"
     case "$target" in
-      x86_64-pc-windows-msvc) archive_name="${APP_NAME}-Windows-x64.exe" ;;
-      aarch64-pc-windows-msvc) archive_name="${APP_NAME}-Windows-arm64.exe" ;;
-      *) archive_name="${APP_NAME}-${target}.exe" ;;
+      x86_64-pc-windows-msvc)
+        archive_name="${APP_NAME}-Windows-x64.exe"
+        cli_archive_name="rovdex-windows-x64.zip"
+        ;;
+      aarch64-pc-windows-msvc)
+        archive_name="${APP_NAME}-Windows-arm64.exe"
+        cli_archive_name="rovdex-windows-arm64.zip"
+        ;;
+      *)
+        archive_name="${APP_NAME}-${target}.exe"
+        cli_archive_name="rovdex-${target}.zip"
+        ;;
     esac
     ;;
   -h|--help|help)
@@ -72,6 +90,10 @@ cargo build --release -p rovdex-cli --target "$target"
 stage_dir="$DIST_DIR/package-${target}"
 rm -rf "$stage_dir"
 mkdir -p "$stage_dir"
+
+cli_stage_dir="$DIST_DIR/cli-${target}"
+rm -rf "$cli_stage_dir"
+mkdir -p "$cli_stage_dir"
 
 source_bin="$ROOT_DIR/target/$target/release/rovdex-cli"
 if [[ "$platform" == "windows" ]]; then
@@ -144,11 +166,25 @@ EOF
     -ov \
     -format UDZO \
     "$DIST_DIR/$archive_name"
+
+  cp "$source_bin" "$cli_stage_dir/rovdex"
+  chmod +x "$cli_stage_dir/rovdex"
+  cp "$ROOT_DIR/README.md" "$cli_stage_dir/README.md"
+  cp "$ROOT_DIR/LICENSE" "$cli_stage_dir/LICENSE"
+  rm -f "$DIST_DIR/$cli_archive_name"
+  tar -czf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
 else
   cp "$source_bin" "$stage_dir/$bin_name"
   cp "$ROOT_DIR/README.md" "$stage_dir/README.md"
   cp "$ROOT_DIR/LICENSE" "$stage_dir/LICENSE"
   cp "$source_bin" "$DIST_DIR/$archive_name"
+
+  cp "$source_bin" "$cli_stage_dir/rovdex.exe"
+  cp "$ROOT_DIR/README.md" "$cli_stage_dir/README.md"
+  cp "$ROOT_DIR/LICENSE" "$cli_stage_dir/LICENSE"
+  rm -f "$DIST_DIR/$cli_archive_name"
+  tar -a -cf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
 fi
 
 echo "Created package: $DIST_DIR/$archive_name"
+echo "Created CLI archive: $DIST_DIR/$cli_archive_name"

@@ -8,6 +8,27 @@ Modern software development involves much more than writing code. Developers con
 
 Rovdex is designed around these practical needs. It provides a more natural and efficient development experience, helping developers work more smoothly across local development, project maintenance, code improvement, and engineering productivity.
 
+## Installation
+
+Rovdex now supports an `opencode`-style CLI install flow for published releases.
+
+```bash
+# Install the latest CLI build into ~/.rovdex/bin
+curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
+
+# Install a specific release
+curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.2
+
+# Launch the TUI after install
+rovdex
+```
+
+Release artifacts remain available for direct download as desktop-oriented packages:
+
+- macOS: `.dmg`
+- Windows: `.exe` and `.msi`
+- CLI archives for scripted install: `.tar.gz` on macOS, `.zip` on Windows
+
 ## Core Features
 
 ### 1. Intelligent Code Understanding
@@ -183,6 +204,7 @@ Package contents:
 - macOS: DMG containing `Rovdex.app`, `Applications` shortcut, `README.md`, `LICENSE`
 - Windows: standalone `Rovdex.exe`
 - Windows: installer `Rovdex-Windows-*.msi`
+- CLI archives: `rovdex-darwin-*.tar.gz`, `rovdex-windows-*.zip`
 - `README.md`
 - `LICENSE`
 
@@ -209,10 +231,14 @@ Expected release filenames:
 
 - `Rovdex-macOS-arm64.dmg`
 - `Rovdex-macOS-x64.dmg`
+- `rovdex-darwin-arm64.tar.gz`
+- `rovdex-darwin-x64.tar.gz`
 - `Rovdex-Windows-x64.exe`
 - `Rovdex-Windows-arm64.exe`
 - `Rovdex-Windows-x64.msi`
 - `Rovdex-Windows-arm64.msi`
+- `rovdex-windows-x64.zip`
+- `rovdex-windows-arm64.zip`
 
 Icon assets:
 

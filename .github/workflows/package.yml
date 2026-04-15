@@ -83,6 +83,8 @@ jobs:
             dist/*.dmg
             dist/*.exe
             dist/*.msi
+            dist/*.zip
+            dist/*.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')

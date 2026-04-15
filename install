@@ -1,0 +1,219 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP="rovdex"
+REPO="pivotf/rovdex"
+INSTALL_DIR="${ROVDEX_INSTALL_DIR:-$HOME/.rovdex/bin}"
+
+usage() {
+  cat <<'EOF'
+Rovdex installer
+
+Usage:
+  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
+  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.2
+  ./install --binary /path/to/rovdex
+
+Options:
+  -h, --help           Show help
+  -v, --version VER    Install a specific version
+  -b, --binary PATH    Install from a local binary
+  -d, --dir PATH       Install into a custom directory
+      --no-modify-path Do not try to update shell PATH config
+EOF
+}
+
+requested_version="${VERSION:-}"
+binary_path=""
+no_modify_path="false"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -v|--version)
+      requested_version="${2:-}"
+      if [[ -z "$requested_version" ]]; then
+        echo "--version requires a value" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    -b|--binary)
+      binary_path="${2:-}"
+      if [[ -z "$binary_path" ]]; then
+        echo "--binary requires a path" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    -d|--dir)
+      INSTALL_DIR="${2:-}"
+      if [[ -z "$INSTALL_DIR" ]]; then
+        echo "--dir requires a path" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --no-modify-path)
+      no_modify_path="true"
+      shift
+      ;;
+    *)
+      echo "unknown option: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+detect_target() {
+  local raw_os arch
+  raw_os="$(uname -s)"
+  arch="$(uname -m)"
+
+  case "$raw_os" in
+    Darwin) os="darwin" ;;
+    Linux) os="linux" ;;
+    MINGW*|MSYS*|CYGWIN*) os="windows" ;;
+    *)
+      echo "unsupported operating system: $raw_os" >&2
+      exit 1
+      ;;
+  esac
+
+  case "$arch" in
+    arm64|aarch64) arch="arm64" ;;
+    x86_64|amd64) arch="x64" ;;
+    *)
+      echo "unsupported architecture: $arch" >&2
+      exit 1
+      ;;
+  esac
+
+  if [[ "$os" == "linux" ]]; then
+    echo "linux builds are not published yet" >&2
+    exit 1
+  fi
+
+  case "$os-$arch" in
+    darwin-arm64) archive_name="rovdex-darwin-arm64.tar.gz" ; binary_name="rovdex" ;;
+    darwin-x64) archive_name="rovdex-darwin-x64.tar.gz" ; binary_name="rovdex" ;;
+    windows-arm64) archive_name="rovdex-windows-arm64.zip" ; binary_name="rovdex.exe" ;;
+    windows-x64) archive_name="rovdex-windows-x64.zip" ; binary_name="rovdex.exe" ;;
+    *)
+      echo "unsupported platform target: $os-$arch" >&2
+      exit 1
+      ;;
+  esac
+}
+
+resolve_version() {
+  if [[ -n "$requested_version" ]]; then
+    requested_version="${requested_version#v}"
+    version="$requested_version"
+    return
+  fi
+
+  version="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"v\([^"]*\)".*/\1/p' | head -n 1)"
+  if [[ -z "$version" ]]; then
+    echo "failed to resolve latest release version" >&2
+    exit 1
+  fi
+}
+
+download_archive() {
+  local tmp_dir archive_path url
+  tmp_dir="$(mktemp -d)"
+  trap 'rm -rf "$tmp_dir"' EXIT
+
+  if [[ -n "$requested_version" ]]; then
+    url="https://github.com/$REPO/releases/download/v$version/$archive_name"
+  else
+    url="https://github.com/$REPO/releases/latest/download/$archive_name"
+  fi
+
+  archive_path="$tmp_dir/$archive_name"
+  echo "Installing $APP $version for $archive_name"
+  curl -fL "$url" -o "$archive_path"
+
+  mkdir -p "$INSTALL_DIR"
+  if [[ "$archive_name" == *.tar.gz ]]; then
+    tar -xzf "$archive_path" -C "$tmp_dir"
+  else
+    unzip -q "$archive_path" -d "$tmp_dir"
+  fi
+
+  install_binary "$tmp_dir/$binary_name"
+}
+
+install_binary() {
+  local source_path target_name
+  source_path="$1"
+
+  if [[ ! -f "$source_path" ]]; then
+    echo "binary not found: $source_path" >&2
+    exit 1
+  fi
+
+  target_name="rovdex"
+  if [[ "$binary_name" == *.exe ]]; then
+    target_name="rovdex.exe"
+  fi
+
+  cp "$source_path" "$INSTALL_DIR/$target_name"
+  chmod 755 "$INSTALL_DIR/$target_name"
+}
+
+update_path() {
+  local shell_name config_file export_line
+  shell_name="$(basename "${SHELL:-sh}")"
+  export_line="export PATH=$INSTALL_DIR:\$PATH"
+
+  case "$shell_name" in
+    zsh)
+      config_file="${ZDOTDIR:-$HOME}/.zshrc"
+      ;;
+    bash)
+      config_file="$HOME/.bashrc"
+      ;;
+    fish)
+      config_file="$HOME/.config/fish/config.fish"
+      export_line="fish_add_path $INSTALL_DIR"
+      ;;
+    *)
+      config_file=""
+      ;;
+  esac
+
+  if [[ -n "$config_file" ]]; then
+    mkdir -p "$(dirname "$config_file")"
+    touch "$config_file"
+    if ! grep -Fq "$INSTALL_DIR" "$config_file"; then
+      printf '\n# rovdex\n%s\n' "$export_line" >> "$config_file"
+      echo "Added $INSTALL_DIR to PATH in $config_file"
+    fi
+  else
+    echo "Add this directory to PATH manually: $INSTALL_DIR" >&2
+  fi
+}
+
+mkdir -p "$INSTALL_DIR"
+
+if [[ -n "$binary_path" ]]; then
+  detect_target
+  install_binary "$binary_path"
+else
+  detect_target
+  resolve_version
+  download_archive
+fi
+
+if [[ "$no_modify_path" != "true" && ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
+  update_path
+fi
+
+echo ""
+echo "Installed to $INSTALL_DIR"
+echo "Run 'rovdex' to open the TUI, or 'rovdex --help' for CLI commands."
