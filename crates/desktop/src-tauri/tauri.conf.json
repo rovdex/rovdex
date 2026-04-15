@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "opencode-desktop",
+  "productName": "Rovdex",
   "version": "0.1.5",
   "identifier": "com.pivotf.rovdex",
   "build": {

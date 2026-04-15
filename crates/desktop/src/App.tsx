@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Editor from "@monaco-editor/react";
 import {
@@ -109,10 +109,20 @@ type RunAgentResponse = {
   finalMessage: string;
   iterations: number;
   messages: UiMessage[];
+  timeline: TimelineEntry[];
   pendingPermissions: PendingPermission[];
 };
 
+type TimelineEntry = {
+  id: string;
+  kind: string;
+  title: string;
+  detail: string;
+  status: string;
+};
+
 type PendingPermission = {
+  messageId: string;
   tool: string;
   scope: string;
   target: string;
@@ -183,11 +193,14 @@ export default function App() {
   const [fileDiff, setFileDiff] = useState<WorkspaceDiffResponse | null>(null);
   const [prompt, setPrompt] = useState("");
   const [messages, setMessages] = useState<UiMessage[]>([]);
+  const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [pendingPermissions, setPendingPermissions] = useState<PendingPermission[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKeyInput, setApiKeyInput] = useState("");
   const [manualCopilotToken, setManualCopilotToken] = useState("");
+  const [showBottomPanel, setShowBottomPanel] = useState(true);
+  const [bottomPanelTab, setBottomPanelTab] = useState<"diff" | "terminal">("diff");
 
   async function loadDesktopState() {
     const state = await invoke<DesktopState>("desktop_state");
@@ -356,6 +369,7 @@ export default function App() {
         },
       });
       setMessages(response.messages);
+      setTimeline(response.timeline);
       setPendingPermissions(response.pendingPermissions);
       setPrompt("");
       await loadDesktopState();
@@ -387,7 +401,17 @@ export default function App() {
           content: `[approved ${response.tool}] ${response.rendered}`,
         },
       ]);
-      setPendingPermissions((current) => current.filter((item) => item !== permission));
+      setTimeline((current) => [
+        ...current,
+        {
+          id: `${permission.messageId}-approved`,
+          kind: "approval",
+          title: `Approved: ${permission.tool}`,
+          detail: permission.target,
+          status: "completed",
+        },
+      ]);
+      setPendingPermissions((current) => current.filter((item) => item.messageId !== permission.messageId));
       if (activeFile) {
         await openFile(activeFile.path);
       }
@@ -400,12 +424,22 @@ export default function App() {
   }
 
   function rejectPendingPermission(permission: PendingPermission) {
-    setPendingPermissions((current) => current.filter((item) => item !== permission));
+    setPendingPermissions((current) => current.filter((item) => item.messageId !== permission.messageId));
     setMessages((current) => [
       ...current,
       {
         role: "assistant",
         content: `Rejected pending action: ${permission.tool} -> ${permission.target}`,
+      },
+    ]);
+    setTimeline((current) => [
+      ...current,
+      {
+        id: `${permission.messageId}-rejected`,
+        kind: "approval",
+        title: `Rejected: ${permission.tool}`,
+        detail: permission.target,
+        status: "denied",
       },
     ]);
   }
@@ -414,6 +448,10 @@ export default function App() {
     (provider) => provider.id === desktopState.selectedProvider,
   );
   const isDirty = !!activeFile && editorContent !== activeFile.content;
+  const terminalEntries = useMemo(
+    () => messages.filter((message) => message.role === "tool"),
+    [messages],
+  );
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#1e1e1e] font-sans text-[#cccccc]">
@@ -428,7 +466,15 @@ export default function App() {
           <GitBranch className="h-[22px] w-[22px] cursor-pointer text-[#858585] hover:text-white" strokeWidth={1.5} />
           <MessageSquare className="h-[22px] w-[22px] cursor-pointer text-[#858585] hover:text-white" strokeWidth={1.5} />
           <div className="flex-1" />
-          <TerminalSquare className="mb-2 h-[22px] w-[22px] cursor-pointer text-[#858585] hover:text-white" strokeWidth={1.5} />
+          <button
+            className="mb-2 rounded p-1 hover:bg-[#444444]"
+            onClick={() => {
+              setShowBottomPanel(true);
+              setBottomPanelTab("terminal");
+            }}
+          >
+            <TerminalSquare className="h-[22px] w-[22px] cursor-pointer text-[#858585] hover:text-white" strokeWidth={1.5} />
+          </button>
           <Settings className="mb-2 h-[22px] w-[22px] cursor-pointer text-[#858585] hover:text-white" strokeWidth={1.5} />
         </div>
 
@@ -496,26 +542,70 @@ export default function App() {
               }}
             />
           </div>
-          <div className="max-h-56 overflow-y-auto border-t border-[#2b2b2b] bg-[#181818] px-4 py-3 text-[12px]">
-            <div className="mb-2 flex items-center justify-between text-[#8f8f8f]">
-              <span>CURRENT FILE DIFF</span>
-              <span>
-                {fileDiff?.changed ? `${fileDiff.status.length} change markers` : "clean"}
-              </span>
-            </div>
-            {fileDiff?.status.length ? (
-              <div className="mb-2 flex flex-wrap gap-2">
-                {fileDiff.status.map((entry) => (
-                  <span key={entry} className="rounded bg-[#2a2d2e] px-2 py-1 text-[#cccccc]">
-                    {entry}
-                  </span>
-                ))}
+          {showBottomPanel && (
+            <div className="h-64 overflow-hidden border-t border-[#2b2b2b] bg-[#181818] text-[12px]">
+              <div className="flex h-9 items-center border-b border-[#2b2b2b] bg-[#202020] px-2 text-[#8f8f8f]">
+                <button
+                  className={`rounded px-3 py-1 ${bottomPanelTab === "diff" ? "bg-[#2d2d2d] text-[#cccccc]" : "hover:bg-[#2a2a2a]"}`}
+                  onClick={() => setBottomPanelTab("diff")}
+                >
+                  Diff
+                </button>
+                <button
+                  className={`ml-2 rounded px-3 py-1 ${bottomPanelTab === "terminal" ? "bg-[#2d2d2d] text-[#cccccc]" : "hover:bg-[#2a2a2a]"}`}
+                  onClick={() => setBottomPanelTab("terminal")}
+                >
+                  Terminal
+                </button>
+                <div className="flex-1" />
+                <button className="rounded p-1 hover:bg-[#2a2a2a]" onClick={() => setShowBottomPanel(false)}>
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
-            ) : null}
-            <pre className="whitespace-pre-wrap font-mono leading-5 text-[#bdbdbd]">
-              {fileDiff?.diff?.trim() || "No git diff for the active file."}
-            </pre>
-          </div>
+
+              {bottomPanelTab === "diff" ? (
+                <div className="h-[calc(100%-36px)] overflow-y-auto px-4 py-3">
+                  <div className="mb-2 flex items-center justify-between text-[#8f8f8f]">
+                    <span>CURRENT FILE DIFF</span>
+                    <span>{fileDiff?.changed ? `${fileDiff.status.length} change markers` : "clean"}</span>
+                  </div>
+                  {fileDiff?.status.length ? (
+                    <div className="mb-2 flex flex-wrap gap-2">
+                      {fileDiff.status.map((entry) => (
+                        <span key={entry} className="rounded bg-[#2a2d2e] px-2 py-1 text-[#cccccc]">
+                          {entry}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  <pre className="whitespace-pre-wrap font-mono leading-5 text-[#bdbdbd]">
+                    {fileDiff?.diff?.trim() || "No git diff for the active file."}
+                  </pre>
+                </div>
+              ) : (
+                <div className="h-[calc(100%-36px)] overflow-y-auto px-4 py-3 font-mono">
+                  <div className="mb-2 flex items-center justify-between text-[#8f8f8f]">
+                    <span>TOOL OUTPUT</span>
+                    <span>{terminalEntries.length} entries</span>
+                  </div>
+                  {terminalEntries.length === 0 ? (
+                    <div className="rounded border border-[#2b2b2b] bg-[#161616] p-3 text-[#8f8f8f]">
+                      No tool or terminal output yet. Run an AI task that invokes tools or bash.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {terminalEntries.map((entry, index) => (
+                        <div key={`${index}-${entry.content.slice(0, 24)}`} className="rounded border border-[#2b2b2b] bg-[#161616] p-3">
+                          <div className="mb-2 text-[11px] uppercase tracking-wider text-[#8f8f8f]">Output {index + 1}</div>
+                          <pre className="whitespace-pre-wrap leading-5 text-[#c8d2dc]">{entry.content}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex w-[360px] flex-shrink-0 flex-col border-l border-[#2b2b2b] bg-[#252526]">
@@ -693,14 +783,42 @@ export default function App() {
               ))}
             </div>
 
+            {timeline.length > 0 && (
+              <div className="mt-6 border-t border-[#2b2b2b] pt-4">
+                <div className="mb-2 text-[11px] font-semibold tracking-wider text-[#8f8f8f]">EXECUTION TIMELINE</div>
+                <div className="space-y-2">
+                  {timeline.map((entry) => (
+                    <div key={entry.id} className="rounded border border-[#3c3c3c] bg-[#1f1f1f] p-2">
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-[#cccccc]">{entry.title}</span>
+                        <span className={`rounded px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                          entry.status === "waiting"
+                            ? "bg-[#5a4a1a] text-[#f3d27a]"
+                            : entry.status === "denied"
+                              ? "bg-[#4a2020] text-[#ff9b9b]"
+                              : entry.status === "running"
+                                ? "bg-[#1d3650] text-[#8dc2ff]"
+                                : "bg-[#1f3b28] text-[#98d8a8]"
+                        }`}>
+                          {entry.status}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-[#8f8f8f]">{entry.detail}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {pendingPermissions.length > 0 && (
               <div className="mt-6 border-t border-[#2b2b2b] pt-4">
                 <div className="mb-2 text-[11px] font-semibold tracking-wider text-[#8f8f8f]">PENDING APPROVAL</div>
                 <div className="space-y-2 text-[12px]">
-                  {pendingPermissions.map((permission, index) => (
-                    <div key={`${permission.tool}-${permission.target}-${index}`} className="rounded border border-[#3c3c3c] bg-[#1f1f1f] p-2">
+                  {pendingPermissions.map((permission) => (
+                    <div key={permission.messageId} className="rounded border border-[#3c3c3c] bg-[#1f1f1f] p-2">
                       <div className="text-[#cccccc]">{permission.tool}</div>
                       <div className="mt-1 text-[#8f8f8f]">{permission.scope} · {permission.target}</div>
+                      <div className="mt-2 text-[11px] uppercase tracking-wider text-[#8f8f8f]">Preview</div>
                       <pre className="mt-2 whitespace-pre-wrap rounded bg-[#161616] p-2 font-mono text-[11px] leading-5 text-[#bdbdbd]">
                         {permission.preview}
                       </pre>

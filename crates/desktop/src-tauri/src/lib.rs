@@ -161,12 +161,24 @@ struct RunAgentResponse {
     final_message: String,
     iterations: usize,
     messages: Vec<UiMessage>,
+    timeline: Vec<TimelineEntry>,
     pending_permissions: Vec<PendingPermission>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct TimelineEntry {
+    id: String,
+    kind: String,
+    title: String,
+    detail: String,
+    status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PendingPermission {
+    message_id: String,
     tool: String,
     scope: String,
     target: String,
@@ -473,7 +485,69 @@ fn standard_tool_registry() -> ToolRegistry {
     tools
 }
 
-fn render_pending_preview(tool: &str, input: &Value) -> String {
+fn render_simple_diff(path: &str, old_content: &str, new_content: &str) -> String {
+    let old_lines = old_content.lines().collect::<Vec<_>>();
+    let new_lines = new_content.lines().collect::<Vec<_>>();
+
+    let mut output = vec![
+        format!("--- a/{path}"),
+        format!("+++ b/{path}"),
+    ];
+
+    let max_lines = old_lines.len().max(new_lines.len());
+    let mut found_change = false;
+    for index in 0..max_lines {
+        let old_line = old_lines.get(index).copied();
+        let new_line = new_lines.get(index).copied();
+        if old_line == new_line {
+            continue;
+        }
+
+        found_change = true;
+        output.push(format!("@@ line {} @@", index + 1));
+        if let Some(line) = old_line {
+            output.push(format!("-{}", line));
+        }
+        if let Some(line) = new_line {
+            output.push(format!("+{}", line));
+        }
+    }
+
+    if !found_change {
+        output.push(String::from("(no content change)"));
+    }
+
+    output.join("\n")
+}
+
+fn preview_edit_result(path: &Path, input: &Value) -> String {
+    let old_text = input
+        .as_object()
+        .and_then(|map| map.get("old_text"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let new_text = input
+        .as_object()
+        .and_then(|map| map.get("new_text"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let replace_all = input
+        .as_object()
+        .and_then(|map| map.get("replace_all"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    let current = fs::read_to_string(path).unwrap_or_default();
+    let next = if replace_all {
+        current.replace(old_text, new_text)
+    } else {
+        current.replacen(old_text, new_text, 1)
+    };
+
+    render_simple_diff(&path.display().to_string(), &current, &next)
+}
+
+fn render_pending_preview(context: &Context, tool: &str, input: &Value, target: &str) -> String {
     let object = match input.as_object() {
         Some(value) => value,
         None => return serde_json::to_string_pretty(input).unwrap_or_else(|_| input.to_string()),
@@ -483,24 +557,31 @@ fn render_pending_preview(tool: &str, input: &Value) -> String {
         "write" => {
             let path = object.get("path").and_then(Value::as_str).unwrap_or("<unknown>");
             let content = object.get("content").and_then(Value::as_str).unwrap_or("");
-            let snippet = content.chars().take(240).collect::<String>();
-            format!("write -> {path}\n\n{snippet}")
+            let resolved_path = if Path::new(path).is_absolute() {
+                PathBuf::from(path)
+            } else {
+                context.cwd.join(path)
+            };
+            let current = fs::read_to_string(&resolved_path).unwrap_or_default();
+            render_simple_diff(&resolved_path.display().to_string(), &current, content)
         }
         "edit" => {
             let path = object.get("path").and_then(Value::as_str).unwrap_or("<unknown>");
-            let old_text = object.get("old_text").and_then(Value::as_str).unwrap_or("");
-            let new_text = object.get("new_text").and_then(Value::as_str).unwrap_or("");
-            format!(
-                "edit -> {path}\n\n--- old ---\n{}\n\n+++ new +++\n{}",
-                old_text.chars().take(160).collect::<String>(),
-                new_text.chars().take(160).collect::<String>()
-            )
+            let resolved_path = if Path::new(path).is_absolute() {
+                PathBuf::from(path)
+            } else {
+                context.cwd.join(path)
+            };
+            preview_edit_result(&resolved_path, input)
         }
         "bash" => {
             let command = object.get("command").and_then(Value::as_str).unwrap_or("");
             format!("bash\n\n{command}")
         }
-        _ => serde_json::to_string_pretty(input).unwrap_or_else(|_| input.to_string()),
+        _ => {
+            let rendered = serde_json::to_string_pretty(input).unwrap_or_else(|_| input.to_string());
+            format!("{}\n\n{}", target, rendered)
+        }
     }
 }
 
@@ -755,16 +836,19 @@ fn run_agent(request: RunAgentRequest) -> Result<RunAgentResponse, String> {
         .iter()
         .filter_map(render_session_message)
         .collect();
+    let timeline = build_timeline(&run.events);
     let pending_permissions = run
         .events
         .iter()
         .filter_map(|event| match event {
             SessionEvent::PermissionRequired {
+                message_id,
                 tool,
                 scope,
                 target,
                 ..
             } => Some(PendingPermission {
+                message_id: message_id.clone(),
                 tool: tool.clone(),
                 scope: scope.clone(),
                 target: target.clone(),
@@ -772,10 +856,7 @@ fn run_agent(request: RunAgentRequest) -> Result<RunAgentResponse, String> {
                     .session
                     .messages
                     .iter()
-                    .find(|message| match &message.parts[..] {
-                        [rovdex_core::MessagePart::ToolCall { tool: called_tool, .. }, ..] => called_tool == tool,
-                        _ => false,
-                    })
+                    .find(|message| message.id == *message_id)
                     .and_then(|message| {
                         message.parts.iter().find_map(|part| match part {
                             rovdex_core::MessagePart::ToolCall { input, .. } => Some(input.clone()),
@@ -787,14 +868,11 @@ fn run_agent(request: RunAgentRequest) -> Result<RunAgentResponse, String> {
                     .session
                     .messages
                     .iter()
-                    .find(|message| match &message.parts[..] {
-                        [rovdex_core::MessagePart::ToolCall { tool: called_tool, .. }, ..] => called_tool == tool,
-                        _ => false,
-                    })
+                    .find(|message| message.id == *message_id)
                     .and_then(|message| {
                         message.parts.iter().find_map(|part| match part {
                             rovdex_core::MessagePart::ToolCall { input, .. } => {
-                                Some(render_pending_preview(tool, input))
+                                Some(render_pending_preview(&context, tool, input, target))
                             }
                             _ => None,
                         })
@@ -810,6 +888,7 @@ fn run_agent(request: RunAgentRequest) -> Result<RunAgentResponse, String> {
         final_message: run.final_message,
         iterations: run.iterations,
         messages,
+        timeline,
         pending_permissions,
     })
 }
@@ -852,6 +931,91 @@ fn render_session_message(message: &SessionMessage) -> Option<UiMessage> {
         role: format!("{:?}", message.role).to_lowercase(),
         content,
     })
+}
+
+fn build_timeline(events: &[SessionEvent]) -> Vec<TimelineEntry> {
+    events
+        .iter()
+        .map(|event| match event {
+            SessionEvent::SessionStarted {
+                session_id,
+                agent,
+                provider,
+                model,
+            } => TimelineEntry {
+                id: format!("{session_id}-started"),
+                kind: String::from("session"),
+                title: String::from("Session started"),
+                detail: format!("agent: {agent} · provider: {provider}/{model}"),
+                status: String::from("completed"),
+            },
+            SessionEvent::MessageRecorded {
+                message_id,
+                role,
+                ..
+            } => TimelineEntry {
+                id: message_id.clone(),
+                kind: String::from("message"),
+                title: format!("{:?} message", role),
+                detail: format!("recorded message id {message_id}"),
+                status: String::from("completed"),
+            },
+            SessionEvent::ToolCalled {
+                message_id, tool, ..
+            } => TimelineEntry {
+                id: format!("{message_id}-called"),
+                kind: String::from("tool"),
+                title: format!("Tool called: {tool}"),
+                detail: String::from("agent requested tool execution"),
+                status: String::from("running"),
+            },
+            SessionEvent::PermissionRequired {
+                message_id,
+                tool,
+                scope,
+                target,
+                ..
+            } => TimelineEntry {
+                id: format!("{message_id}-approval"),
+                kind: String::from("approval"),
+                title: format!("Approval required: {tool}"),
+                detail: format!("{scope} · {target}"),
+                status: String::from("waiting"),
+            },
+            SessionEvent::ToolDenied {
+                message_id,
+                tool,
+                scope,
+                target,
+                ..
+            } => TimelineEntry {
+                id: format!("{message_id}-denied"),
+                kind: String::from("tool"),
+                title: format!("Tool denied: {tool}"),
+                detail: format!("{scope} · {target}"),
+                status: String::from("denied"),
+            },
+            SessionEvent::ToolCompleted {
+                message_id, tool, ..
+            } => TimelineEntry {
+                id: format!("{message_id}-completed"),
+                kind: String::from("tool"),
+                title: format!("Tool completed: {tool}"),
+                detail: String::from("tool finished successfully"),
+                status: String::from("completed"),
+            },
+            SessionEvent::SessionFinished {
+                session_id,
+                iterations,
+            } => TimelineEntry {
+                id: format!("{session_id}-finished"),
+                kind: String::from("session"),
+                title: String::from("Session finished"),
+                detail: format!("iterations: {iterations}"),
+                status: String::from("completed"),
+            },
+        })
+        .collect()
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
