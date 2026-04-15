@@ -14,7 +14,8 @@ $DistDir = Join-Path $RootDir "dist"
 $BuildDir = Join-Path $DistDir "msi-$Target"
 $ExeSource = Join-Path $RootDir "target\$Target\release\rovdex-cli.exe"
 $IconSource = Join-Path $RootDir "assets\icons\Rovdex.ico"
-$WxsPath = Join-Path $BuildDir "Rovdex.wxs"
+$MsiWxsPath = Join-Path $BuildDir "Rovdex.msi.wxs"
+$BundleWxsPath = Join-Path $BuildDir "Rovdex.bundle.wxs"
 
 if ([string]::IsNullOrWhiteSpace($Version)) {
   $cargoToml = Get-Content (Join-Path $RootDir "Cargo.toml")
@@ -57,12 +58,32 @@ $upgradeCode = switch ($Target) {
   "aarch64-pc-windows-msvc" { "19E20EAF-3D3E-4B4A-9A0C-3E3D84D6A002" }
 }
 
+$bundleUpgradeCode = switch ($Target) {
+  "x86_64-pc-windows-msvc" { "B27818E3-D4E1-4D0F-95EF-0D4A9A52A001" }
+  "aarch64-pc-windows-msvc" { "B27818E3-D4E1-4D0F-95EF-0D4A9A52A002" }
+}
+
+$mainComponentGuid = switch ($Target) {
+  "x86_64-pc-windows-msvc" { "A73EA0A4-9E16-47D1-8C64-C9A7BF4E1001" }
+  "aarch64-pc-windows-msvc" { "A73EA0A4-9E16-47D1-8C64-C9A7BF4E1011" }
+}
+
+$shortcutComponentGuid = switch ($Target) {
+  "x86_64-pc-windows-msvc" { "A73EA0A4-9E16-47D1-8C64-C9A7BF4E1002" }
+  "aarch64-pc-windows-msvc" { "A73EA0A4-9E16-47D1-8C64-C9A7BF4E1012" }
+}
+
 $msiName = switch ($Target) {
   "x86_64-pc-windows-msvc" { "Rovdex-Windows-x64.msi" }
   "aarch64-pc-windows-msvc" { "Rovdex-Windows-arm64.msi" }
 }
 
-$wxs = @"
+$installerExeName = switch ($Target) {
+  "x86_64-pc-windows-msvc" { "Rovdex-Windows-x64.exe" }
+  "aarch64-pc-windows-msvc" { "Rovdex-Windows-arm64.exe" }
+}
+
+$msiWxs = @"
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
     Name="$AppName"
@@ -75,13 +96,14 @@ $wxs = @"
 
     <SummaryInformation Description="$AppName Installer" Manufacturer="Rovdex" />
     <MediaTemplate EmbedCab="yes" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of $AppName is already installed." />
 
     <Icon Id="AppIcon.ico" SourceFile="Rovdex.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon.ico" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="$AppName">
-        <Component Id="MainExecutable" Guid="A73EA0A4-9E16-47D1-8C64-C9A7BF4E1001">
+        <Component Id="MainExecutable" Guid="$mainComponentGuid">
           <File Id="RovdexExe" Source="Rovdex.exe" KeyPath="yes" />
         </Component>
       </Directory>
@@ -89,7 +111,7 @@ $wxs = @"
 
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="AppProgramMenuDir" Name="$AppName">
-        <Component Id="ProgramMenuShortcut" Guid="A73EA0A4-9E16-47D1-8C64-C9A7BF4E1002">
+        <Component Id="ProgramMenuShortcut" Guid="$shortcutComponentGuid">
           <Shortcut
             Id="ApplicationStartMenuShortcut"
             Name="$AppName"
@@ -117,19 +139,49 @@ $wxs = @"
 </Wix>
 "@
 
-Set-Content -Path $WxsPath -Value $wxs -Encoding UTF8
+Set-Content -Path $MsiWxsPath -Value $msiWxs -Encoding UTF8
+
+$bundleWxs = @"
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle
+    Name="$AppName"
+    Manufacturer="Rovdex"
+    Version="$Version"
+    UpgradeCode="$bundleUpgradeCode"
+    IconSourceFile="Rovdex.ico">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+        Theme="hyperlinkLicense"
+        LicenseUrl="https://raw.githubusercontent.com/rovdex/rovdex/main/LICENSE" />
+    </BootstrapperApplication>
+    <Chain>
+      <MsiPackage SourceFile="$msiName" />
+    </Chain>
+  </Bundle>
+</Wix>
+"@
+
+Set-Content -Path $BundleWxsPath -Value $bundleWxs -Encoding UTF8
 
 $outputMsi = Join-Path $DistDir $msiName
 if (Test-Path $outputMsi) {
   Remove-Item $outputMsi -Force
 }
 
+$outputInstallerExe = Join-Path $DistDir $installerExeName
+if (Test-Path $outputInstallerExe) {
+  Remove-Item $outputInstallerExe -Force
+}
+
 Push-Location $BuildDir
 try {
-  wix build -arch $arch -o $outputMsi $WxsPath
+  wix build -arch $arch -o $outputMsi $MsiWxsPath
+  wix build -arch $arch -ext WixToolset.Bal.wixext -o $outputInstallerExe $BundleWxsPath
 }
 finally {
   Pop-Location
 }
 
 Write-Host "Created MSI: $outputMsi"
+Write-Host "Created installer EXE: $outputInstallerExe"

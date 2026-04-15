@@ -2,10 +2,6 @@
 
 ## Downloads
 
-- macOS Apple Silicon: `Rovdex-macOS-arm64.dmg`
-- macOS Intel: `Rovdex-macOS-x64.dmg`
-- CLI macOS Apple Silicon: `rovdex-darwin-arm64.tar.gz`
-- CLI macOS Intel: `rovdex-darwin-x64.tar.gz`
 - Windows x64: `Rovdex-Windows-x64.exe`
 - Windows ARM64: `Rovdex-Windows-arm64.exe`
 - Windows x64 Installer: `Rovdex-Windows-x64.msi`
@@ -15,15 +11,14 @@
 
 ## Included
 
-- `Rovdex.app` inside macOS DMG
-- app icons for macOS and Windows
-- Windows executable metadata and icon resources
+- Windows installer EXE for guided installation and upgrades
 - Windows MSI installer with Start Menu shortcut
+- Windows CLI archives for scripted installation
 
 ## Notes
 
-- macOS DMG includes an `Applications` shortcut for drag-and-drop install
-- Windows MSI installs to `Program Files`
+- Windows EXE wraps the MSI to provide an install experience closer to `opencode`
+- Windows MSI installs to `Program Files` and supports major upgrades
 - GitHub Copilot-style auth discovery is included
 
 ## Changes

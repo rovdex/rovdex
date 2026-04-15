@@ -11,7 +11,7 @@ Rovdex installer
 
 Usage:
   curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
-  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.3
+  curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.4
   ./install --binary /path/to/rovdex
 
 Options:
@@ -98,12 +98,10 @@ detect_target() {
   fi
 
   case "$os-$arch" in
-    darwin-arm64) archive_name="rovdex-darwin-arm64.tar.gz" ; binary_name="rovdex" ;;
-    darwin-x64) archive_name="rovdex-darwin-x64.tar.gz" ; binary_name="rovdex" ;;
     windows-arm64) archive_name="rovdex-windows-arm64.zip" ; binary_name="rovdex.exe" ;;
     windows-x64) archive_name="rovdex-windows-x64.zip" ; binary_name="rovdex.exe" ;;
     *)
-      echo "unsupported platform target: $os-$arch" >&2
+      echo "Windows x64 and ARM64 are the only published installer targets right now: $os-$arch" >&2
       exit 1
       ;;
   esac

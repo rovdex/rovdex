@@ -23,7 +23,7 @@ Examples:
 
 Notes:
   - macOS packages are emitted as .dmg containing Rovdex.app
-  - Windows packages are emitted as .exe
+  - Windows CLI packages are emitted as .zip
   - The script expects the required Rust target and linker toolchain to already exist
 EOF
 }
@@ -53,19 +53,14 @@ case "$platform" in
     ;;
   windows)
     target="${requested_target:-x86_64-pc-windows-msvc}"
-    bin_name="${APP_NAME}.exe"
-    archive_ext="exe"
     case "$target" in
       x86_64-pc-windows-msvc)
-        archive_name="${APP_NAME}-Windows-x64.exe"
         cli_archive_name="rovdex-windows-x64.zip"
         ;;
       aarch64-pc-windows-msvc)
-        archive_name="${APP_NAME}-Windows-arm64.exe"
         cli_archive_name="rovdex-windows-arm64.zip"
         ;;
       *)
-        archive_name="${APP_NAME}-${target}.exe"
         cli_archive_name="rovdex-${target}.zip"
         ;;
     esac
@@ -174,11 +169,6 @@ EOF
   rm -f "$DIST_DIR/$cli_archive_name"
   tar -czf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
 else
-  cp "$source_bin" "$stage_dir/$bin_name"
-  cp "$ROOT_DIR/README.md" "$stage_dir/README.md"
-  cp "$ROOT_DIR/LICENSE" "$stage_dir/LICENSE"
-  cp "$source_bin" "$DIST_DIR/$archive_name"
-
   cp "$source_bin" "$cli_stage_dir/rovdex.exe"
   cp "$ROOT_DIR/README.md" "$cli_stage_dir/README.md"
   cp "$ROOT_DIR/LICENSE" "$cli_stage_dir/LICENSE"
@@ -186,5 +176,7 @@ else
   tar -a -cf "$DIST_DIR/$cli_archive_name" -C "$cli_stage_dir" .
 fi
 
-echo "Created package: $DIST_DIR/$archive_name"
+if [[ "$platform" == "macos" ]]; then
+  echo "Created package: $DIST_DIR/$archive_name"
+fi
 echo "Created CLI archive: $DIST_DIR/$cli_archive_name"

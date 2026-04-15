@@ -17,17 +17,16 @@ Rovdex now supports an `opencode`-style CLI install flow for published releases.
 curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash
 
 # Install a specific release
-curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.3
+curl -fsSL https://raw.githubusercontent.com/pivotf/rovdex/main/install | bash -s -- --version 0.1.4
 
 # Launch the TUI after install
 rovdex
 ```
 
-Release artifacts remain available for direct download as desktop-oriented packages:
+Release artifacts remain available for direct download as Windows-oriented packages:
 
-- macOS: `.dmg`
-- Windows: `.exe` and `.msi`
-- CLI archives for scripted install: `.tar.gz` on macOS, `.zip` on Windows
+- Windows: installer `.exe` and `.msi`
+- CLI archives for scripted install: `.zip`
 
 ## Core Features
 
@@ -134,17 +133,13 @@ cargo run -p rovdex-cli -- auth status copilot
 # Remove stored authentication
 cargo run -p rovdex-cli -- auth logout copilot
 
-# Build a macOS ARM64 DMG
-./scripts/generate_icons.sh
-scripts/package.sh macos
-
-# Build a Windows x64/AMD64 EXE
+# Build a Windows x64/AMD64 CLI archive
 scripts/package.sh windows x86_64-pc-windows-msvc
 
-# Build a Windows ARM64 EXE
+# Build a Windows ARM64 CLI archive
 scripts/package.sh windows aarch64-pc-windows-msvc
 
-# Build a Windows MSI on Windows with WiX installed
+# Build a Windows installer EXE and MSI on Windows with WiX installed
 pwsh ./scripts/package-windows-msi.ps1 -Target x86_64-pc-windows-msvc
 ```
 
@@ -159,7 +154,7 @@ Rovdex adapts those ideas into a Rust workspace with a typed core engine, tool r
 
 ## Desktop Direction
 
-Rovdex is being shaped as a desktop-oriented coding tool for macOS and Windows, not only a terminal utility.
+Rovdex is being shaped as a desktop-oriented coding tool, with Windows release packaging currently prioritized.
 
 - Platform-aware app path discovery is now built into the core
 - Project sessions are stored under the repository in `.rovdex/sessions`
@@ -193,18 +188,17 @@ Stored Rovdex auth state is written to the app config directory as `auth.json`, 
 
 ## Packaging
 
-Rovdex includes a simple release packaging script:
+Rovdex currently ships a Windows-focused release flow:
 
-- `scripts/package.sh macos`
 - `scripts/package.sh windows x86_64-pc-windows-msvc`
 - `scripts/package.sh windows aarch64-pc-windows-msvc`
+- `pwsh ./scripts/package-windows-msi.ps1 -Target x86_64-pc-windows-msvc`
 
 Package contents:
 
-- macOS: DMG containing `Rovdex.app`, `Applications` shortcut, `README.md`, `LICENSE`
-- Windows: standalone `Rovdex.exe`
+- Windows: installer `Rovdex-Windows-*.exe`
 - Windows: installer `Rovdex-Windows-*.msi`
-- CLI archives: `rovdex-darwin-*.tar.gz`, `rovdex-windows-*.zip`
+- CLI archives: `rovdex-windows-*.zip`
 - `README.md`
 - `LICENSE`
 
@@ -214,25 +208,17 @@ Output directory:
 
 Current status:
 
-- macOS ARM64 DMG can be produced on this machine
-- macOS x64 DMG should be built on an Intel mac runner or a machine with the `x86_64-apple-darwin` target installed
-- Windows x64/AMD64 EXE should be built on a Windows runner or a machine with the `x86_64-pc-windows-msvc` target installed
-- Windows ARM64 EXE should be built on a Windows runner or a machine with the `aarch64-pc-windows-msvc` target installed
+- Windows x64/AMD64 installer EXE should be built on a Windows runner or a machine with the `x86_64-pc-windows-msvc` target installed
+- Windows ARM64 installer EXE should be built on a Windows runner or a machine with the `aarch64-pc-windows-msvc` target installed
 - GitHub Actions workflow: `.github/workflows/package.yml`
 - Release template: `docs/RELEASE_TEMPLATE.md`
 
 Workflow policy:
 
-- only `main` is used for automated package builds
-- pushing to `main` triggers package builds
-- pushing a `v*` tag triggers package builds and publishes a GitHub Release
+- pushing a `v*` tag triggers Windows package builds and publishes a GitHub Release
 
 Expected release filenames:
 
-- `Rovdex-macOS-arm64.dmg`
-- `Rovdex-macOS-x64.dmg`
-- `rovdex-darwin-arm64.tar.gz`
-- `rovdex-darwin-x64.tar.gz`
 - `Rovdex-Windows-x64.exe`
 - `Rovdex-Windows-arm64.exe`
 - `Rovdex-Windows-x64.msi`
@@ -243,7 +229,6 @@ Expected release filenames:
 Icon assets:
 
 - source image: `assets/icons/source.png`
-- generated macOS icon: `assets/icons/Rovdex.icns`
 - generated Windows icon: `assets/icons/Rovdex.ico`
 
 ## Who It Is For

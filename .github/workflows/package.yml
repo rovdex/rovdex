@@ -12,12 +12,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            platform: macos
-            target: aarch64-apple-darwin
-          - os: macos-15-intel
-            platform: macos
-            target: x86_64-apple-darwin
           - os: windows-latest
             platform: windows
             target: x86_64-pc-windows-msvc
@@ -41,14 +35,7 @@ jobs:
       - name: Build Tests
         run: cargo test --workspace
 
-      - name: Generate Icons
-        if: matrix.platform == 'macos'
-        shell: bash
-        run: |
-          chmod +x scripts/generate_icons.sh
-          ./scripts/generate_icons.sh
-
-      - name: Package
+      - name: Build CLI Archive
         shell: bash
         run: |
           chmod +x scripts/package.sh
@@ -78,11 +65,9 @@ jobs:
         with:
           name: package-${{ matrix.target }}
           path: |
-            dist/*.dmg
             dist/*.exe
             dist/*.msi
             dist/*.zip
-            dist/*.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
